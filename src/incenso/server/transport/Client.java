@@ -9,22 +9,70 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * The client wrapper class. Allows low-level communication with clients on the lowest granularity.
+ *
+ * @author Kamila Szewczyk
+ */
 public class Client {
+    /**
+     * The socket used as a channel for communication between the remote client and this server.
+     */
     private final Socket io;
+
+    /**
+     * Serialization output stream.
+     */
     private final ObjectOutputStream out;
+
+    /**
+     * Serialization input stream.
+     */
     private final ObjectInputStream in;
 
+    /**
+     * Upload lock - locked during performing I/O operations on the client socket.
+     */
     private final ReentrantLock uploadLock = new ReentrantLock();
+
+    /**
+     * Synchronize lock - locked during synchronization of client specs with the client wrapper class.
+     */
     private final ReentrantLock synchronizeLock = new ReentrantLock();
 
-    private long storage = 0, ram = 0;
+    /**
+     * Cached amount of storage available in KB.
+     */
+    private long storage = 0;
+
+    /**
+     * Cached amount of RAM in KiB.
+     */
+    private long ram = 0;
+
+    /**
+     * Cached amount of processors available to the target machine.
+     */
     private int processors = 0;
 
+    /**
+     * Incenso server which owns the current client instance.
+     */
     private final IncensoServer server;
 
+    /**
+     * A thread which periodically sends a keepalive message and disconnects the client
+     * from the pool as soon as it stops responding to pings.
+     */
     private Thread keepaliveThread;
 
-    public Client(IncensoServer parent, Socket io) throws RemoteException {
+    /**
+     * A basic client constructor used by IncensoServer.
+     * @param parent IncensoServer which owns the current client.
+     * @param io Socket used as the main channel of communication between server and the remote.
+     * @throws RemoteException
+     */
+    protected Client(IncensoServer parent, Socket io) throws RemoteException {
         this.io = io;
         this.server = parent;
 
@@ -51,11 +99,12 @@ public class Client {
                 }, "Client keepalive thread.");
 
                 keepaliveThread.start();
-            }).orElse(x -> { throw new RuntimeException(x); });
+            }).orElse(x -> {
+                server.onDisconnect().broadcast(Client.this);
+                server.clientUnlink(Client.this);
+            });
         } catch(IOException e) {
             throw new RemoteException("Socket manipulation exception.", e);
-        } catch(RuntimeException e) {
-            throw (RuntimeException) e.getCause();
         } catch(Exception e) {
             throw new RemoteException("Unhandled error.", e);
         }

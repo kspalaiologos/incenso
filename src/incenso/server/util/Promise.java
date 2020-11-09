@@ -1,6 +1,5 @@
 package incenso.server.util;
 
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -27,7 +26,7 @@ import java.util.function.Consumer;
  */
 public abstract class Promise<X, Y> {
     /**
-     * Every promise can be:
+     * Every promise can be either:
      * <ul>
      *     <li>Finished - the operation completed successfully.</li>
      *     <li>Failed - the operation failed.</li>
