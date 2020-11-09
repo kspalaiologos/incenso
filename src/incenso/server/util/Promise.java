@@ -77,7 +77,7 @@ public abstract class Promise<X, Y> {
         cFail = y;
 
         if(failValue != null)
-            cOk.accept(failValue);
+            cFail.accept(failValue);
         return this;
     }
 
