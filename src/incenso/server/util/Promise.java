@@ -1,5 +1,6 @@
 package incenso.server.util;
 
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -17,8 +18,6 @@ import java.util.function.Consumer;
  * The promise operation usually <code>extends Promise</code> and implements two methods - <code>onResolve</code>
  * and <code>process</code>. It can call <code>finish(X)</code> to mark the promise finished with value X, or
  * <code>fail(Y)</code> to mark the promise failed with value Y.
- *
- * TODO: A PROMISE CAN FINISH BEFORE UNWRAP AND ORELSE ARE REGISTERED. HANDLE THAT.
  *
  * @param <X> Finish type.
  * @param <Y> Fail type.
@@ -54,6 +53,9 @@ public abstract class Promise<X, Y> {
     private Consumer<X> cOk = null;
     private Consumer<Y> cFail = null;
 
+    private X okValue = null;
+    private Y failValue = null;
+
     private AtomicReference<Status> promiseStatus;
 
     private final CountDownLatch resolveSync = new CountDownLatch(1);
@@ -65,16 +67,24 @@ public abstract class Promise<X, Y> {
 
     public Promise<X,Y> unwrap(Consumer<X> x) {
         cOk = x;
+
+        if(okValue != null)
+            cOk.accept(okValue);
         return this;
     }
 
     public Promise<X,Y> orElse(Consumer<Y> y) {
         cFail = y;
+
+        if(failValue != null)
+            cOk.accept(failValue);
         return this;
     }
 
     protected void fail(Y y) {
         promiseStatus.set(Status.FAILED);
+
+        failValue = y;
 
         if(cFail != null)
             cFail.accept(y);
@@ -86,6 +96,8 @@ public abstract class Promise<X, Y> {
 
     protected void finish(X x) {
         promiseStatus.set(Status.FINISHED);
+
+        okValue = x;
 
         if(cOk != null)
             try {
