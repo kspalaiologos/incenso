@@ -19,6 +19,9 @@ import java.util.function.Consumer;
  * and <code>process</code>. It can call <code>finish(X)</code> to mark the promise finished with value X, or
  * <code>fail(Y)</code> to mark the promise failed with value Y.
  *
+ * A promise has two callbacks - <code>unwrap</code> and <code>orElse</code>. Set them <i>only once</i>. Changing
+ * the callback for an existing promise results in undefined behaviour.
+ *
  * @param <X> Finish type.
  * @param <Y> Fail type.
  */
@@ -48,39 +51,86 @@ public abstract class Promise<X, Y> {
      */
     protected abstract void process();
 
-    protected Object lock = new Object();
-
+    /**
+     * Action executed when a promise finishes.
+     */
     private Consumer<X> cOk = null;
+
+    /**
+     * Action executed when a promise fails.
+     */
     private Consumer<Y> cFail = null;
 
+    /**
+     * Value of the promise, in case it finishes.
+     * It's kept because actions are sometimes invoked after the promise finishes,
+     * and the value has to be fed into the consumer.
+     */
     private X okValue = null;
+
+    /**
+     * Value of the promise, in case it fails.
+     * It's kept because actions are sometimes invoked after the promise fails,
+     * and the value has to be fed into the consumer.
+     */
     private Y failValue = null;
 
+    /**
+     * Atomic promise status. It can be read and set from multiple threads,
+     * so we want to ensure synchronized access.
+     */
     private AtomicReference<Status> promiseStatus;
 
+    /**
+     * A lock used by `resolve', which joins the promise thread into the current (waiting) thread.
+     */
     private final CountDownLatch resolveSync = new CountDownLatch(1);
 
+    /**
+     * An empty promise constructor. Starts the promise thread and initializes the promise status to
+     * <code>Status.PENDING</code>.
+     */
     public Promise() {
         promiseStatus = new AtomicReference<>(Status.PENDING);
         new Thread(this::process, "Pending promise.").start();
     }
 
+    /**
+     * Unwrap the promise: When the promise finishes, execute a given callback with the finish value.
+     * Either this or <code>orElse</code> is guaranteed to be called eventually.
+     *
+     * @return Current promise.
+     */
     public Promise<X,Y> unwrap(Consumer<X> x) {
         cOk = x;
 
         if(okValue != null)
             cOk.accept(okValue);
+
         return this;
     }
 
+    /**
+     * Execute a consumer when the promise fails with a given fail value.
+     * Either this or <code>unwrap</code> is guaranteed to be called eventually.
+     *
+     * @return Current promise.
+     */
     public Promise<X,Y> orElse(Consumer<Y> y) {
         cFail = y;
 
         if(failValue != null)
             cFail.accept(failValue);
+
         return this;
     }
 
+    /**
+     * Internal promise API. Marks the promise as failed, sets the failure value,
+     * schedules calling the failure consumer, notifies threads waiting for the promise
+     * to be resolved and calls <code>onResolve</code> handlers.
+     * @param y
+     */
     protected void fail(Y y) {
         promiseStatus.set(Status.FAILED);
 
@@ -94,6 +144,12 @@ public abstract class Promise<X, Y> {
         resolveSync.countDown();
     }
 
+    /**
+     * Internal promise API. Marks the promise as finished, sets the finish value,
+     * schedules calling the <code>unwrap</code> consumer and notifies threads waiting for the
+     * promise to be resolved and calls <code>onResolve</code> handlers.
+     * @param x
+     */
     protected void finish(X x) {
         promiseStatus.set(Status.FINISHED);
 
@@ -111,6 +167,9 @@ public abstract class Promise<X, Y> {
         resolveSync.countDown();
     }
 
+    /**
+     * Block the current thread until the promise is resolved.
+     */
     public void resolve() {
         try { resolveSync.await(); } catch(Exception e) { }
     }
