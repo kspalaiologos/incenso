@@ -110,18 +110,32 @@ public class Client {
         }
     }
 
+    /**
+     * @return The amount of storage kilobytes available the remote machine.
+     */
     public long getStorageKilobytes() {
         return storage;
     }
 
+    /**
+     * @return The amount of KiB of RAM available to the remote machine.
+     */
     public long getRAMKiB() {
         return ram;
     }
 
+    /**
+     * @return The amount of processors available to the remote machine.
+     */
     public int getCPUs() {
         return processors;
     }
 
+    /**
+     * Return a promise which sends a PacketKeepalive to the client. Called periodically
+     * by the keepaliveThread. This procedure can result in removing the client from the client list.
+     * @return
+     */
     public Promise<Boolean, RemoteException> isAlive() {
         return new Promise<Boolean, RemoteException>() {
             @Override
@@ -160,6 +174,11 @@ public class Client {
         };
     }
 
+    /**
+     * Attempt at forcing a garbage collector cycle on the remote server.
+     * It's needed to ensure smooth reloading of classes.
+     * @return
+     */
     public Promise<Boolean, RemoteException> forceGC() {
         return new Promise<Boolean, RemoteException>() {
             @Override
